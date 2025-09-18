@@ -9,6 +9,8 @@ import android.graphics.drawable.Drawable;
 import android.os.Environment;
 import android.util.Log;
 
+import com.topjohnwu.superuser.Shell;
+
 import org.proxydroid.Exec;
 import org.proxydroid.ProxyDroidService;
 import org.proxydroid.R;
@@ -24,7 +26,6 @@ public class Utils {
 
   public final static String TAG = "ProxyDroid";
   public final static String DEFAULT_SHELL = "/system/bin/sh";
-  public final static String DEFAULT_ROOTS[] = {"/sbin/su", "/system/bin/su", "/system/xbin/su", "/su/bin/su", "/su/xbin/su", "/magisk/.core/bin/su"};
   public final static String DEFAULT_IPTABLES = "iptables";
   public final static String ALTERNATIVE_IPTABLES = "/system/bin/iptables";
   public final static int TIME_OUT = -99;
@@ -32,10 +33,10 @@ public class Utils {
   private static int hasRedirectSupport = -1;
   private static int isRoot = -1;
   private static String shell = null;
-  private static String root_shell = null;
   private static String iptables = null;
   private static String data_path = null;
   private static boolean isConnecting = false;
+  private static Shell rootShell = null;
 
   public static boolean isConnecting() {
     return isConnecting;
@@ -57,7 +58,6 @@ public class Utils {
   }
 
   private static void checkIptables() {
-
     if (!isRoot()) {
       iptables = DEFAULT_IPTABLES;
       return;
@@ -66,35 +66,28 @@ public class Utils {
     // Check iptables binary
     iptables = DEFAULT_IPTABLES;
 
-    String lines = null;
+    try {
+      Shell.Result result = Shell.cmd(iptables + " --version").exec();
+      
+      boolean compatible = false;
+      boolean version = false;
 
-    boolean compatible = false;
-    boolean version = false;
+      if (result.getOut().toString().contains("OUTPUT")) {
+        compatible = true;
+      }
+      if (result.getOut().toString().contains("v1.4.")) {
+        version = true;
+      }
 
-    StringBuilder sb = new StringBuilder();
-    String command = iptables + " --version\n" + iptables
-        + " -L -t nat -n\n" + "exit\n";
-
-    int exitcode = runScript(command, sb, 10 * 1000, true);
-
-    if (exitcode == TIME_OUT)
-      return;
-
-    lines = sb.toString();
-
-    if (lines.contains("OUTPUT")) {
-      compatible = true;
+      if (!compatible || !version) {
+        iptables = ALTERNATIVE_IPTABLES;
+        if (!new File(iptables).exists())
+          iptables = "iptables";
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to check iptables", e);
+      iptables = DEFAULT_IPTABLES;
     }
-    if (lines.contains("v1.4.")) {
-      version = true;
-    }
-
-    if (!compatible || !version) {
-      iptables = ALTERNATIVE_IPTABLES;
-      if (!new File(iptables).exists())
-        iptables = "iptables";
-    }
-
   }
 
   public static String getDataPath(Context ctx) {
@@ -153,27 +146,25 @@ public class Utils {
   }
 
   public static void initHasRedirectSupported() {
-
     if (!Utils.isRoot())
       return;
 
-    StringBuilder sb = new StringBuilder();
-    String command = Utils.getIptables()
-        + " -t nat -A OUTPUT -p udp --dport 54 -j REDIRECT --to 8154";
+    try {
+      String command = Utils.getIptables()
+          + " -t nat -A OUTPUT -p udp --dport 54 -j REDIRECT --to 8154";
 
-    int exitcode = runScript(command, sb, 10 * 1000, true);
+      Shell.Result result = Shell.cmd(command).exec();
 
-    String lines = sb.toString();
+      hasRedirectSupport = 1;
 
-    hasRedirectSupport = 1;
+      // flush the check command
+      Utils.runRootCommand(command.replace("-A", "-D"));
 
-    // flush the check command
-    Utils.runRootCommand(command.replace("-A", "-D"));
-
-    if (exitcode == TIME_OUT)
-      return;
-
-    if (lines.contains("No chain/target/match")) {
+      if (result.getOut().toString().contains("No chain/target/match")) {
+        hasRedirectSupport = 0;
+      }
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to check redirect support", e);
       hasRedirectSupport = 0;
     }
   }
@@ -189,37 +180,24 @@ public class Utils {
   }
 
   public static boolean isRoot() {
-
     if (isRoot != -1)
       return isRoot == 1;
 
-    // switch between binaries
-    root_shell = "su";
-    for (int i = 0; i < DEFAULT_ROOTS.length; i++) {
-        if (new File(DEFAULT_ROOTS[i]).exists()) {
-            root_shell = DEFAULT_ROOTS[i];
-            break;
-        }
-    }
-
-    String lines = null;
-
-    StringBuilder sb = new StringBuilder();
-    String command = "ls /\n" + "exit\n";
-
-    int exitcode = runScript(command, sb, 10 * 1000, true);
-
-    if (exitcode == TIME_OUT) {
+    try {
+      // Use libsu to check for root access
+      Shell.Result result = Shell.cmd("ls /").exec();
+      if (result.isSuccess()) {
+        isRoot = 1;
+        return true;
+      } else {
+        isRoot = 0;
+        return false;
+      }
+    } catch (Exception e) {
+      Log.d(TAG, "Root access not available: " + e.getMessage());
+      isRoot = 0;
       return false;
     }
-
-    lines = sb.toString();
-
-    if (lines.contains("system")) {
-      isRoot = 1;
-    }
-
-    return isRoot == 1;
   }
 
   public static boolean runCommand(String command, int timeout) {
@@ -238,40 +216,55 @@ public class Utils {
   }
 
   public static boolean runRootCommand(String command, int timeout) {
-
     Log.d(TAG, command);
-
-    runScript(command, null, timeout, true);
-
-    return true;
+    
+    try {
+      Shell.Result result = Shell.cmd(command).exec();
+      return result.isSuccess();
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to execute root command: " + command, e);
+      return false;
+    }
   }
 
   public static boolean runRootCommand(String command) {
-
     return runRootCommand(command, 10 * 1000);
-
   }
 
   private synchronized static int runScript(String script, StringBuilder res,
                                             long timeout, boolean asroot) {
-    final ScriptRunner runner = new ScriptRunner(script, res, asroot);
-    runner.start();
     try {
-      if (timeout > 0) {
-        runner.join(timeout);
+      if (asroot) {
+        Shell.Result result = Shell.cmd(script).exec();
+        if (res != null) {
+          res.append(result.getOut().toString());
+        }
+        return result.isSuccess() ? 0 : -1;
       } else {
-        runner.join();
+        // For non-root commands, we can still use the old approach or implement a simpler version
+        final ScriptRunner runner = new ScriptRunner(script, res, asroot);
+        runner.start();
+        try {
+          if (timeout > 0) {
+            runner.join(timeout);
+          } else {
+            runner.join();
+          }
+          if (runner.isAlive()) {
+            // Timed-out
+            runner.destroy();
+            runner.join(1000);
+            return TIME_OUT;
+          }
+        } catch (InterruptedException ex) {
+          return TIME_OUT;
+        }
+        return runner.exitcode;
       }
-      if (runner.isAlive()) {
-        // Timed-out
-        runner.destroy();
-        runner.join(1000);
-        return TIME_OUT;
-      }
-    } catch (InterruptedException ex) {
-      return TIME_OUT;
+    } catch (Exception e) {
+      Log.e(TAG, "Failed to execute script", e);
+      return -1;
     }
-    return runner.exitcode;
   }
 
   public static boolean isWorking() {
@@ -417,8 +410,9 @@ public class Utils {
       try {
 
         if (this.asroot) {
-          // Create the "su" request to run the script
-          pipe = createSubprocess(pid, root_shell);
+          // This should not be called anymore since we use libsu for root commands
+          Log.w(TAG, "ScriptRunner called with asroot=true, this should use libsu instead");
+          pipe = createSubprocess(pid, "su");
         } else {
           // Create the "sh" request to run the script
           pipe = createSubprocess(pid, getShell());

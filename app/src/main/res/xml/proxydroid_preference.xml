@@ -12,6 +12,12 @@
         android:key="profile"
         android:title="@string/profile">
     </ListPreference>
+    
+    <CheckBoxPreference
+        android:key="darkMode"
+        android:summary="@string/dark_mode_summary"
+        android:title="@string/dark_mode">
+    </CheckBoxPreference>
   </PreferenceCategory>
   <PreferenceCategory android:title="@string/proxy_cat">
     <CheckBoxPreference

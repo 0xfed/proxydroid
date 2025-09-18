@@ -138,6 +138,7 @@ public class ProxyDroid extends PreferenceActivity
     private CheckBoxPreference isBypassAppsCheck;
     private Preference proxyedApps;
     private Preference bypassAddrs;
+    private CheckBoxPreference darkModeCheck;
     private AdView adView;
     private BroadcastReceiver ssidReceiver = new BroadcastReceiver() {
         @Override
@@ -312,6 +313,8 @@ public class ProxyDroid extends PreferenceActivity
      */
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Apply theme before setContentView
+        applyTheme();
         super.onCreate(savedInstanceState);
         addPreferencesFromResource(R.xml.proxydroid_preference);
 
@@ -357,6 +360,7 @@ public class ProxyDroid extends PreferenceActivity
         isPACCheck = (CheckBoxPreference) findPreference("isPAC");
         isAutoConnectCheck = (CheckBoxPreference) findPreference("isAutoConnect");
         isBypassAppsCheck = (CheckBoxPreference) findPreference("isBypassApps");
+        darkModeCheck = (CheckBoxPreference) findPreference("darkMode");
 
         final SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
 
@@ -961,6 +965,9 @@ public class ProxyDroid extends PreferenceActivity
             } else {
                 passwordText.setSummary(getString(R.string.password_summary));
             }
+        } else if (key.equals("darkMode")) {
+            // Restart activity to apply new theme
+            recreate();
         }
     }
 
@@ -981,6 +988,20 @@ public class ProxyDroid extends PreferenceActivity
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM | MenuItem.SHOW_AS_ACTION_WITH_TEXT);
 
         return super.onCreateOptionsMenu(menu);
+    }
+
+    /**
+     * Apply theme based on user preference
+     */
+    private void applyTheme() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean isDarkMode = prefs.getBoolean("darkMode", false);
+        
+        if (isDarkMode) {
+            setTheme(R.style.AppTheme_Dark);
+        } else {
+            setTheme(R.style.AppTheme);
+        }
     }
 
     @Override
