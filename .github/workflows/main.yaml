@@ -1,0 +1,44 @@
+name: Build ProxyDroid
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install unzip
+        run: apt-get update && apt-get install unzip -y
+      
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      
+      - name: Install JDK 17 for Android SDK
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165
+        with:
+          distribution: 'corretto'
+          java-version: '17'
+      
+      - name: Install Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: "build-tools;29.0.0 ndk;27.3.13750724 tools platform-tools platforms;android-29"
+      
+      - name: Install JDK 8 for Gradle
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165
+        with:
+          distribution: 'corretto'
+          java-version: '8'
+      
+      - name: Build
+        run: ./gradlew assembleDebug
+      
+      - name: List artifacts
+        run: ls -ali app/build/outputs/apk/debug/
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ProxyDroid-debug.apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
