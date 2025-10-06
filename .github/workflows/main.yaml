@@ -13,6 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
       
+      - name: Set outputs
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      
       - name: Install JDK 17 for Android SDK
         uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165
         with:
@@ -36,6 +40,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ProxyDroid-debug.apk
+          name: ProxyDroid-${{ steps.vars.outputs.sha_short }}
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 30
+          retention-days: 180
+          if-no-files-found: error
