@@ -42,5 +42,4 @@ jobs:
         with:
           name: ProxyDroid-${{ steps.vars.outputs.sha_short }}
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 180
           if-no-files-found: error
