@@ -11,11 +11,9 @@ here is a list of them:
  * transproxy - transparent proxy for HTTP: http://transproxy.sourceforge.net/
  * stunnel - multiplatform SSL tunneling proxy: http://www.stunnel.org/
 
-## TRAVIS CI STATUS
+## Build
 
-[![Build Status](https://secure.travis-ci.org/madeye/proxydroid.png)](http://travis-ci.org/madeye/proxydroid)
-
-[Nightly Builds](http://buildbot.sinaapp.com)
+[Github Action](https://github.com/0xfed/proxydroid/actions)
 
 ## PREREQUISITES
 
